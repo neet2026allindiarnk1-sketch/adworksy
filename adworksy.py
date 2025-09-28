@@ -2,14 +2,22 @@ import requests
 import time
 import json
 from datetime import datetime
+import threading
+from flask import Flask
 
-# Configuration
+# ==== Flask dummy server ====
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "✅ Worker is running in background"
+
+# ==== Original Script Config ====
 URL = "https://shibaadearner.top/scratch/api/watch-ad.php"
 USER_ID = 5531217637
 REQUESTS_PER_HOUR = 15
 DELAY_BETWEEN_REQUESTS = 60  # 1 minute in seconds
 
-# Headers
 headers = {
     'Accept': '*/*',
     'Accept-Encoding': 'gzip, deflate, br, zstd',
@@ -27,68 +35,54 @@ headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0'
 }
 
-# Payload
 payload = {
     "user_id": USER_ID
 }
 
+# ==== Functions ====
 def send_request():
-    """Send a single request and return the response"""
     try:
         response = requests.post(URL, headers=headers, json=payload)
-        
         if response.status_code == 200:
             data = response.json()
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Success!")
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ✅ Success!")
             print(f"  Status: {data.get('status')}")
             print(f"  Message: {data.get('message')}")
             print(f"  New Balance: {data.get('new_balance')}")
             print(f"  Watches This Hour: {data.get('watches_this_hour')}")
             print(f"  Earned: {data.get('earned')}")
             print("-" * 50)
-            return True
         else:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Error: Status Code {response.status_code}")
-            return False
-            
-    except requests.exceptions.RequestException as e:
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ❌ Error: Status Code {response.status_code}")
+    except Exception as e:
         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Request failed: {e}")
-        return False
-    except json.JSONDecodeError:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Failed to parse response")
-        return False
 
-def main():
-    """Main function to run the script continuously"""
-    print("Script started. Press Ctrl+C to stop.")
-    print("=" * 50)
-    
+def worker_loop():
+    print("Background worker started. Script will run continuously.")
     while True:
         start_time = time.time()
-        
         print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Starting new hour cycle...")
-        
-        # Send 15 requests with 1 minute delay between each
+
         for i in range(REQUESTS_PER_HOUR):
             print(f"\nSending request {i+1}/{REQUESTS_PER_HOUR}")
             send_request()
-            
-            # Wait 1 minute before next request (except after the last request)
             if i < REQUESTS_PER_HOUR - 1:
                 print(f"Waiting {DELAY_BETWEEN_REQUESTS} seconds before next request...")
                 time.sleep(DELAY_BETWEEN_REQUESTS)
-        
-        # Calculate time spent and remaining time in the hour
+
         time_spent = time.time() - start_time
-        remaining_time = 3600 - time_spent  # 3600 seconds = 1 hour
-        
+        remaining_time = 3600 - time_spent
         if remaining_time > 0:
             print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Completed {REQUESTS_PER_HOUR} requests.")
             print(f"Waiting {int(remaining_time)} seconds ({remaining_time/60:.1f} minutes) until next hour...")
             time.sleep(remaining_time)
-        
+
+# ==== Entry point ====
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print("\n\nScript stopped by user.")
+    # Background thread
+    t = threading.Thread(target=worker_loop)
+    t.daemon = True
+    t.start()
+
+    # Flask server to keep Render happy
+    app.run(host="0.0.0.0", port=10000)
